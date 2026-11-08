@@ -20,7 +20,9 @@ HUNYUAN 3D OMNI COMMUNITY LICENSE AGREEMENT.
 
 # Load libgcc_s library to prevent runtime issues
 import ctypes
-libgcc_s = ctypes.CDLL('libgcc_s.so.1')
+import sys
+if sys.platform.startswith('linux'):
+    libgcc_s = ctypes.CDLL('libgcc_s.so.1')
 
 # Set GPU device (can be overridden by command line arguments)
 import os

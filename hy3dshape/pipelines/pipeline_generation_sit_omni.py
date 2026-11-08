@@ -21,6 +21,7 @@ HUNYUAN 3D OMNI COMMUNITY LICENSE AGREEMENT.
 from typing import List, Optional, Union
 import os
 import json
+import time
 import numpy as np
 import trimesh
 import torch
@@ -32,6 +33,47 @@ from diffusers.utils.torch_utils import randn_tensor
 
 from .utils import init_from_ckpt, export_to_trimesh, synchronize_timer
 from hy3dshape.models.utils.misc import get_config_from_file, instantiate_from_config
+
+
+def _find_safetensors(submodule_dir, variant=None):
+    """返回该子模块可用的 float16 safetensors 路径；没有则返回 None。"""
+    names = ['model_ema_fp16.safetensors'] if variant == 'ema' else ['model_fp16.safetensors']
+    for name in names:
+        path = os.path.join(submodule_dir, name)
+        if os.path.isfile(path):
+            return path
+    return None
+
+
+def _load_from_safetensors(config, st_path, device, dtype):
+    """meta 设备建模 + safetensors 直读显存。任何一步不满足条件就返回 None，回退到原始加载方式。"""
+    from safetensors.torch import load_file
+
+    t = time.time()
+    with torch.device('meta'):
+        submodule = instantiate_from_config(config)
+    if not isinstance(submodule, nn.Module):
+        return None
+
+    state_dict = load_file(st_path, device=str(device))
+    state_dict = {k: v.to(dtype) if v.is_floating_point() else v for k, v in state_dict.items()}
+    missing, unexpected = submodule.load_state_dict(state_dict, strict=False, assign=True)
+    del state_dict
+
+    leftover = [n for n, p in list(submodule.named_parameters()) + list(submodule.named_buffers()) if p.is_meta]
+    if missing or leftover:
+        # 有权重文件里没有的参数/缓冲区，meta 上无法得到正确初值，回退
+        print(f'[fast-load] {st_path}: {len(missing)} missing / {len(leftover)} meta tensors, fallback to .bin')
+        torch.cuda.empty_cache()
+        return None
+    if unexpected:
+        print(f"Unexpected Keys: {Counter([s.split('.')[0] for s in unexpected])}")
+
+    submodule.disable_drop = True
+    submodule = submodule.to(device=device, dtype=dtype)
+    submodule.eval()
+    print(f'Loaded {st_path} (fp16 safetensors -> {device}) in {time.time() - t:.1f}s')
+    return submodule
 
 
 class Hunyuan3DOmniSiTFlowMatchingPipeline:
@@ -70,7 +112,6 @@ class Hunyuan3DOmniSiTFlowMatchingPipeline:
             )
             print('path', path)
 
-        ckpt_name = 'pytorch_model.bin'
         submodules = dict()
         for submodule_name in ['model', 'vae','cond_encoder', 'scheduler', 'image_processor']:
             config_path = os.path.join(model_path, submodule_name, 'config.json')
@@ -87,8 +128,19 @@ class Hunyuan3DOmniSiTFlowMatchingPipeline:
                 print(f'Loaded {submodule_name}')
                 continue
 
+            # 快速路径：有 float16 safetensors 时，在 meta 设备上建空模型（不占内存、不做随机初始化），
+            # 权重直接从硬盘读到显存。结果与“fp32 .bin 加载后再 .to(fp16)”逐位一致。
+            st_path = _find_safetensors(os.path.join(model_path, submodule_name), variant)
+            if st_path is not None and os.environ.get('HY3D_FORCE_BIN', '0') != '1':
+                submodule = _load_from_safetensors(config, st_path, device, dtype)
+                if submodule is not None:
+                    submodules[submodule_name] = submodule
+                    print(f'Loaded {submodule_name}')
+                    continue
+
             submodule = instantiate_from_config(config)
             if isinstance(submodule, nn.Module):
+                ckpt_name = 'pytorch_model.bin'
                 ckpt_path = os.path.join(model_path, submodule_name, ckpt_name)
                 if variant == 'ema':
                     ckpt_name = 'pytorch_model_ema.bin'

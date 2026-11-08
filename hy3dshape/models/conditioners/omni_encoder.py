@@ -20,6 +20,7 @@ HUNYUAN 3D OMNI COMMUNITY LICENSE AGREEMENT.
 
 from typing import Optional, Union, List
 import math
+import os
 import random
 import torch
 from torch import Tensor
@@ -94,6 +95,10 @@ class DinoImageEncoder(nn.Module):
         **kwargs,
     ):
         super().__init__()
+        # 整合包：优先使用本地权重目录（HY3D_DINO_PATH），避免联网下载
+        local_dino = os.environ.get('HY3D_DINO_PATH')
+        if local_dino and os.path.isdir(local_dino):
+            version = local_dino
         self.model = Dinov2Model.from_pretrained(version)
         self.use_cls_token = use_cls_token
         self.use_pos_embed = use_pos_embed

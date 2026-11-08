@@ -122,3 +122,10 @@ cython_debug/
 
 omni_inference_results
 weights
+
+# WebUI / 整合包
+outputs/
+outputs_app.*
+omni_inference_results/
+venv/
+.venv/
