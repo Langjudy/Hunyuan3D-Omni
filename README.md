@@ -19,6 +19,18 @@
 [//]: # (  <a href="#"><img alt="PyPI - Downloads" src="https://img.shields.io/pypi/v/mulankit?logo=pypi"  height=22px></a>)
 <br>
 
+> [!NOTE]
+> **本仓库是 [Tencent-Hunyuan/Hunyuan3D-Omni](https://github.com/Tencent-Hunyuan/Hunyuan3D-Omni) 的 Fork，在官方代码基础上做了 Windows 一键整合包改进。**
+>
+> - 🖥️ **图形界面** `app.py`：基于 Gradio，支持点云 / 体素 / 骨骼 / 包围盒四种控制方式，自动抠图，可预览控制信号，导出 GLB / OBJ
+> - ⚡ **加载提速**：主模型转为 float16 safetensors 直接加载到显卡，加载时间约 144 秒 → 27 秒，内存峰值减半，生成结果与原版一致
+> - 🪟 **Windows 兼容**：修复 Linux 专用库加载和临时文件占用问题，DINOv2 / 抠图模型全部本地离线加载
+> - 🚀 **一键启动**：双击 `启动.bat` 即可，详见 [使用说明.md](使用说明.md)
+>
+> **获取方式**：完整整合包（含运行环境与模型权重，约 15 GB）请见 [Releases](../../releases)。只克隆本仓库的话，需要自行准备 `venv` 环境，并运行 `download_weights.py` 下载权重。
+>
+> 模型与代码遵循 Tencent Hunyuan 3D Omni Community License，**不适用于欧盟、英国、韩国**地区。以下为官方原版说明。
+
 # Hunyuan3D-Omni
 
 Hunyuan3D-Omni is a unified framework for the controllable generation of 3D assets, which inherits the structure of Hunyuan3D 2.1. In contrast, Hunyuan3D-Omni constructs a unified control encoder to introduce additional control signals, including point cloud, voxel, skeleton, and bounding box.
